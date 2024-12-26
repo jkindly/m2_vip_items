@@ -34,7 +34,7 @@ bool CHARACTER::AddPremium(BYTE byPremiumType, DWORD dwPremiumTime)
 		affect = AFFECT_AUTOLOOT;
 		break;
 	default:
-		sys_err("Nieznany typ PREMIUM: PID: %d", GetPlayerID());
+		sys_err("Uknown premium type %d: PID: %d", byPremiumType, GetPlayerID());
 		return false;
 	}
 
