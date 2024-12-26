@@ -1,0 +1,1 @@
+#define ENABLE_VIP_ITEMS
