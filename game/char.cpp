@@ -19,19 +19,19 @@ bool CHARACTER::AddPremium(BYTE byPremiumType, DWORD dwPremiumTime)
 	{
 	case PREMIUM_EXP:
 		premiumStr = "silver_expire";
-		affect = AFFECT_EXP_BONUS;
+		affect = PREMIUM_EXP;
 		break;
 	case PREMIUM_ITEM:
 		premiumStr = "gold_expire";
-		affect = AFFECT_ITEM_BONUS;
+		affect = PREMIUM_ITEM;
 		break;
 	case PREMIUM_GOLD:
 		premiumStr = "money_drop_rate_expire";
-		affect = AFFECT_GOLD_BONUS;
+		affect = PREMIUM_GOLD;
 		break;
 	case PREMIUM_AUTOLOOT:
 		premiumStr = "autoloot_expire";
-		affect = AFFECT_AUTOLOOT;
+		affect = PREMIUM_AUTOLOOT;
 		break;
 	default:
 		sys_err("Uknown premium type %d: PID: %d", byPremiumType, GetPlayerID());
@@ -47,7 +47,7 @@ bool CHARACTER::AddPremium(BYTE byPremiumType, DWORD dwPremiumTime)
 		m_aiPremiumTimes[byPremiumType] += dwPremiumTime;
 	}
 
-	AddAffect(affect, POINT_NONE, 0, 0, GetPremiumRemainSeconds(byPremiumType), 0, true);
+	AddAffect(AFFECT_PREMIUM_START + affect, POINT_NONE, 0, 0, GetPremiumRemainSeconds(byPremiumType), 0, true);
 
 	std::unique_ptr<SQLMsg> pMsg(
 		DBManager::instance().DirectQuery(
