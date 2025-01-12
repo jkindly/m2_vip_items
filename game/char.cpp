@@ -1,84 +1,70 @@
-// add at the end of the file:
 #ifdef ENABLE_VIP_ITEMS
-bool CHARACTER::AddPremium(BYTE byPremiumType, DWORD dwPremiumTime)
+
+#include <memory>
+#include <stdexcept>
+
+// Add a premium type to the character
+bool CHARACTER::AddPremium(BYTE premiumType, DWORD premiumTime)
 {
-	if (!GetDesc())
-	{
-		return false;
-	}
+    if (!GetDesc() || premiumTime == 0)
+        return false;
 
-	if (dwPremiumTime <= 0)
-	{
-		return false;
-	}
+    struct PremiumInfo {
+        const char* dbField;
+        DWORD affectType;
+    };
 
-	std::string premiumStr = "";
-	DWORD affect = 0;
+    static const PremiumInfo premiumInfo[] = {
+        {"silver_expire", AFFECT_EXP_BONUS},        // PREMIUM_EXP
+        {"gold_expire", AFFECT_ITEM_BONUS},        // PREMIUM_ITEM
+        {"money_drop_rate_expire", AFFECT_GOLD_BONUS}, // PREMIUM_GOLD
+        {"autoloot_expire", AFFECT_AUTOLOOT}       // PREMIUM_AUTOLOOT
+    };
 
-	switch (byPremiumType)
-	{
-	case PREMIUM_EXP:
-		premiumStr = "silver_expire";
-		affect = AFFECT_EXP_BONUS;
-		break;
-	case PREMIUM_ITEM:
-		premiumStr = "gold_expire";
-		affect = AFFECT_ITEM_BONUS;
-		break;
-	case PREMIUM_GOLD:
-		premiumStr = "money_drop_rate_expire";
-		affect = AFFECT_GOLD_BONUS;
-		break;
-	case PREMIUM_AUTOLOOT:
-		premiumStr = "autoloot_expire";
-		affect = AFFECT_AUTOLOOT;
-		break;
-	default:
-		sys_err("Uknown premium type %d: PID: %d", byPremiumType, GetPlayerID());
-		return false;
-	}
+    if (premiumType >= std::size(premiumInfo)) {
+        sys_err("Unknown premium type %d: PID: %d", premiumType, GetPlayerID());
+        return false;
+    }
 
-	if (GetPremiumRemainSeconds(byPremiumType) <= 0)
-	{
-		m_aiPremiumTimes[byPremiumType] = get_global_time() + dwPremiumTime;
-	}
-	else
-	{
-		m_aiPremiumTimes[byPremiumType] += dwPremiumTime;
-	}
+    const auto& info = premiumInfo[premiumType];
 
-	AddAffect(affect, POINT_NONE, 0, 0, GetPremiumRemainSeconds(byPremiumType), 0, true);
+    // Update premium time
+    m_aiPremiumTimes[premiumType] = std::max(m_aiPremiumTimes[premiumType], get_global_time()) + premiumTime;
 
-	std::unique_ptr<SQLMsg> pMsg(
-		DBManager::instance().DirectQuery(
-			"UPDATE `srv1_account`.`account` SET `%s` = FROM_UNIXTIME(%d) WHERE `id` = %d;",
-			premiumStr.c_str(),
-			m_aiPremiumTimes[byPremiumType],
-			GetDesc()->GetAccountTable().id
-		)
-	);
-	
-	if (pMsg->Get()->uiAffectedRows == 0)
-	{
-		sys_err("Error during adding premium to player account. Error: %d", pMsg->uiSQLErrno);
-		return false;
-	}
+    // Add the affect
+    AddAffect(info.affectType, POINT_NONE, 0, 0, GetPremiumRemainSeconds(premiumType), 0, true);
 
-	return true;
+    // Update the database
+    char query[256];
+    snprintf(query, sizeof(query),
+             "UPDATE `srv1_account`.`account` SET `%s` = FROM_UNIXTIME(%d) WHERE `id` = %d;",
+             info.dbField,
+             m_aiPremiumTimes[premiumType],
+             GetDesc()->GetAccountTable().id);
+
+    auto pMsg = DBManager::instance().DirectQuery(query);
+    if (pMsg->Get()->uiAffectedRows == 0) {
+        sys_err("Failed to update premium for account ID %d", GetDesc()->GetAccountTable().id);
+        return false;
+    }
+
+    return true;
 }
 
+// Save premium times to the database
 void CHARACTER::SavePremiumTimes()
 {
-	if (!GetDesc())
-	{
-		return;
-	}
+    if (!GetDesc())
+        return;
 
-	TPacketGDPremiumTimes packet{};
+    TPacketGDPremiumTimes packet = {};
+    packet.dwID = GetDesc()->GetAccountTable().id;
 
-	packet.dwID = GetDesc()->GetAccountTable().id;
-	thecore_memcpy(packet.iPremiumTimes, m_aiPremiumTimes, sizeof(packet.iPremiumTimes));
+    // Copy premium times
+    std::copy(std::begin(m_aiPremiumTimes), std::end(m_aiPremiumTimes), std::begin(packet.iPremiumTimes));
 
-	db_clientdesc->DBPacket(HEADER_GD_SAVE_PREMIUM_TIMES, GetDesc()->GetHandle(), &packet, sizeof(packet));
+    // Send the data to the database
+    db_clientdesc->DBPacket(HEADER_GD_SAVE_PREMIUM_TIMES, GetDesc()->GetHandle(), &packet, sizeof(packet));
 }
+
 #endif
